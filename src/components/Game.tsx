@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateStoryStep, generateImage, generateChatResponse, GameState } from '../services/gemini';
-import { Scroll, Backpack, Image as ImageIcon, MessageSquare, Send, Loader2, Zap, Brain, Save, ToggleLeft, ToggleRight, BookOpen, Search } from 'lucide-react';
+import { Scroll, Backpack, Image as ImageIcon, MessageSquare, Send, Loader2, Zap, Brain, Save, ToggleLeft, ToggleRight, BookOpen, Search, Users } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 export default function Game() {
@@ -38,7 +38,8 @@ export default function Game() {
           const loadedGameState = { 
             ...data.gameState, 
             difficultyLevel: data.gameState.difficultyLevel ?? 0,
-            lore: data.gameState.lore ?? []
+            lore: data.gameState.lore ?? [],
+            characters: data.gameState.characters ?? []
           };
           setGameState(loadedGameState);
           setStoryHistory(data.storyHistory);
@@ -92,7 +93,8 @@ export default function Game() {
       const stateWithDifficulty = { 
         ...state, 
         difficultyLevel: state.difficultyLevel ?? 0,
-        lore: state.lore ?? []
+        lore: state.lore ?? [],
+        characters: state.characters ?? []
       };
       setGameState(stateWithDifficulty);
       setStoryHistory(newHistory);
@@ -190,6 +192,35 @@ export default function Game() {
               </ul>
             ) : (
               <div className="text-sm text-zinc-600 italic">Your pockets are empty.</div>
+            )}
+          </div>
+
+          {/* Characters */}
+          <div>
+            <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <Users size={14} /> Characters
+            </h2>
+            {gameState?.characters && gameState.characters.length > 0 ? (
+              <ul className="space-y-4">
+                {gameState.characters.map((char, i) => (
+                  <li key={i} className="bg-zinc-950/50 border border-zinc-800 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-bold text-white">{char.name}</span>
+                      <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${
+                        char.status.toLowerCase() === 'alive' ? 'bg-green-500/10 text-green-400' :
+                        char.status.toLowerCase() === 'hostile' ? 'bg-red-500/10 text-red-400' :
+                        'bg-zinc-800 text-zinc-400'
+                      }`}>
+                        {char.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 leading-tight mb-2">{char.description}</p>
+                    <div className="text-[10px] text-indigo-400 font-medium">Relation: {char.relationship}</div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-sm text-zinc-600 italic">No companions or enemies yet.</div>
             )}
           </div>
 

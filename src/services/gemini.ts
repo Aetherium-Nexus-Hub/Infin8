@@ -5,6 +5,13 @@ const getGenAI = () => {
   return new GoogleGenAI({ apiKey: key });
 };
 
+export interface Character {
+  name: string;
+  description: string;
+  relationship: string;
+  status: string;
+}
+
 export interface GameState {
   storyText: string;
   choices: string[];
@@ -13,6 +20,7 @@ export interface GameState {
   imagePrompt: string;
   difficultyLevel: number;
   lore: string[];
+  characters: Character[];
 }
 
 const SYSTEM_INSTRUCTION = `You are an expert dungeon master running an infinite choose-your-own-adventure game.
@@ -26,6 +34,10 @@ Maintain a list of "lore" entries. These represent key facts discovered about th
 When you discover new information or experience a major event, identify if it should be added to the lore.
 DO NOT repeat existing lore. Only output NEW lore entries in the "newLoreEntries" field.
 Future story steps and dialogue MUST remain consistent with the established lore.
+
+Character Tracking:
+Maintain a list of key characters encountered. Track their traits, the user's relationship with them, and their current status (e.g., alive, missing, hostile).
+Update this list as characters change or new ones are introduced. Ensure character personalities remain consistent.
 
 Dynamic Difficulty:
 Track the user's success or failure. If they are struggling frequently, make the upcoming plot slightly easier or offer hints. If they are succeeding easily, introduce tougher obstacles.
@@ -43,9 +55,23 @@ const responseSchema = {
     quest: { type: Type.STRING, description: "The user's current active quest or objective." },
     imagePrompt: { type: Type.STRING, description: "Prompt for the image generator. Must include the consistent art style." },
     suggestedDifficultyAdjustment: { type: Type.NUMBER, description: "Suggested difficulty adjustment: -1, 0, or 1." },
-    newLoreEntries: { type: Type.ARRAY, items: { type: Type.STRING }, description: "New facts or discoveries to add to the persistent lore database." }
+    newLoreEntries: { type: Type.ARRAY, items: { type: Type.STRING }, description: "New facts or discoveries to add to the persistent lore database." },
+    characters: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          description: { type: Type.STRING },
+          relationship: { type: Type.STRING },
+          status: { type: Type.STRING }
+        },
+        required: ["name", "description", "relationship", "status"]
+      },
+      description: "The full updated list of characters encountered."
+    }
   },
-  required: ["storyText", "choices", "inventory", "quest", "imagePrompt", "suggestedDifficultyAdjustment", "newLoreEntries"]
+  required: ["storyText", "choices", "inventory", "quest", "imagePrompt", "suggestedDifficultyAdjustment", "newLoreEntries", "characters"]
 };
 
 export const generateStoryStep = async (
@@ -57,7 +83,7 @@ export const generateStoryStep = async (
   
   let promptText = userChoice;
   if (currentState) {
-    promptText = `Current Inventory: ${currentState.inventory.join(', ') || 'Empty'}\nCurrent Quest: ${currentState.quest}\nDifficulty Level: ${currentState.difficultyLevel}\nExisting Lore:\n${currentState.lore.map(l => `- ${l}`).join('\n') || 'No lore discovered yet.'}\nUser Choice: ${userChoice}`;
+    promptText = `Current Inventory: ${currentState.inventory.join(', ') || 'Empty'}\nCurrent Quest: ${currentState.quest}\nDifficulty Level: ${currentState.difficultyLevel}\nExisting Lore:\n${currentState.lore.map(l => `- ${l}`).join('\n') || 'No lore discovered yet.'}\nKey Characters:\n${currentState.characters.map(c => `- ${c.name}: ${c.description} (Relationship: ${c.relationship}, Status: ${c.status})`).join('\n') || 'No key characters encountered yet.'}\nUser Choice: ${userChoice}`;
   } else {
     promptText = `Start a new adventure. The user has no items and no quest yet. Introduce the world and give them a starting scenario.`;
   }
@@ -140,12 +166,14 @@ export const generateChatResponse = async (
   const ai = getGenAI();
   
   const systemInstruction = `You are a helpful Oracle in a dark fantasy text adventure game.
-You can answer the user's questions about the world, their current quest, or give hints.
+You can answer the user's questions about the world, their current quest, characters, or give hints.
 Current Game State:
 Quest: ${gameState?.quest || 'None'}
 Inventory: ${gameState?.inventory?.join(', ') || 'Empty'}
 World Lore:
 ${gameState?.lore?.map(l => `- ${l}`).join('\n') || 'No lore discovered yet.'}
+Key Characters:
+${gameState?.characters?.map(c => `- ${c.name}: ${c.description} (Relationship: ${c.relationship}, Status: ${c.status})`).join('\n') || 'None encountered.'}
 Recent Story: ${gameState?.storyText || 'Just starting.'}
 Keep responses concise and in character.`;
 
