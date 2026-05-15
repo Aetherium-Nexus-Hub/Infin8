@@ -1,0 +1,5 @@
+{
+  "name": "Infinite Adventure Engine",
+  "description": "An infinite choose-your-own-adventure game with real-time AI image generation, dynamic inventory, and a lore chatbot.",
+  "requestFramePermissions": []
+}
