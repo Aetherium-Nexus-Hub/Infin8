@@ -12,6 +12,16 @@ export interface Character {
   status: string;
 }
 
+export interface Companion {
+  name: string;
+  archetype: string;
+  background: string;
+  abilities: string[];
+  loyalty: number; // 0 to 100
+  relationshipStatus: string; // e.g. "Distrustful", "Neutral", "Friendly", "Loyal", "Devoted", "Hostile"
+  status: string; // e.g. "Active", "Injured", "Fallen", "Deserted"
+}
+
 export interface GameState {
   storyText: string;
   choices: string[];
@@ -21,6 +31,7 @@ export interface GameState {
   difficultyLevel: number;
   lore: string[];
   characters: Character[];
+  companions: Companion[];
 }
 
 const SYSTEM_INSTRUCTION = `You are an expert dungeon master running an infinite choose-your-own-adventure game.
@@ -38,6 +49,22 @@ Future story steps and dialogue MUST remain consistent with the established lore
 Character Tracking:
 Maintain a list of key characters encountered. Track their traits, the user's relationship with them, and their current status (e.g., alive, missing, hostile).
 Update this list as characters change or new ones are introduced. Ensure character personalities remain consistent.
+
+Companion & Recruit System:
+The player can recruit allies as Companions. Keep track of current companions in the "companions" array.
+Companions have:
+1. unique backgrounds and distinct talents ("abilities").
+2. "loyalty" level (0 to 100) and "relationshipStatus" (e.g. Distrustful, Neutral, Warm, Loyal, Devoted).
+Influence companion loyalty based on the player's choices and moral decisions. Loyalty increases if choices match the companion's values and decreases if contradicted.
+If loyalty drop to 0, they might desert or turn hostile.
+Introduce opportunities for the user to encounter or recruit potential companions of these archetypes:
+- "Gloomweaver" (uses shadow magic/stealth, values pragmatic choices, cunning, exploration of forbidden dark knowledge, survival)
+- "Aegis Sentinel" (heavily armored protectors/knights, values chivalry, justice, shield defense, saving innocents at cost of self)
+- "Plague Doctor" (highly educated scientists/healers, values alchemy, analyzing infections, cold rationalism, solving mysteries)
+- "Bloodhound Ranger" (beastmasters/trackers, values raw wilderness instincts, treating beasts with dignity, self-reliance, simple truths)
+- "Cursed Spellblade" (melee combatants bound by forbidden demonic blood pacts, values raw power, high risk high reward, anti-establishment rebellion)
+
+Make sure companions chime in during story dialogues, offer their talents, or influence the story text (e.g., "Aethelgard advises against..."). Offer choices that utilize a companion's unique abilities when they are active in the party!
 
 Dynamic Difficulty:
 Track the user's success or failure. If they are struggling frequently, make the upcoming plot slightly easier or offer hints. If they are succeeding easily, introduce tougher obstacles.
@@ -68,10 +95,27 @@ const responseSchema = {
         },
         required: ["name", "description", "relationship", "status"]
       },
-      description: "The full updated list of characters encountered."
+      description: "The full updated list of general characters encountered."
+    },
+    companions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          archetype: { type: Type.STRING },
+          background: { type: Type.STRING },
+          abilities: { type: Type.ARRAY, items: { type: Type.STRING } },
+          loyalty: { type: Type.INTEGER },
+          relationshipStatus: { type: Type.STRING },
+          status: { type: Type.STRING }
+        },
+        required: ["name", "archetype", "background", "abilities", "loyalty", "relationshipStatus", "status"]
+      },
+      description: "List of recruited companion allies. Actively manage this based on user choices and companion reactions."
     }
   },
-  required: ["storyText", "choices", "inventory", "quest", "imagePrompt", "suggestedDifficultyAdjustment", "newLoreEntries", "characters"]
+  required: ["storyText", "choices", "inventory", "quest", "imagePrompt", "suggestedDifficultyAdjustment", "newLoreEntries", "characters", "companions"]
 };
 
 export const generateStoryStep = async (
@@ -83,9 +127,19 @@ export const generateStoryStep = async (
   
   let promptText = userChoice;
   if (currentState) {
-    promptText = `Current Inventory: ${currentState.inventory.join(', ') || 'Empty'}\nCurrent Quest: ${currentState.quest}\nDifficulty Level: ${currentState.difficultyLevel}\nExisting Lore:\n${currentState.lore.map(l => `- ${l}`).join('\n') || 'No lore discovered yet.'}\nKey Characters:\n${currentState.characters.map(c => `- ${c.name}: ${c.description} (Relationship: ${c.relationship}, Status: ${c.status})`).join('\n') || 'No key characters encountered yet.'}\nUser Choice: ${userChoice}`;
+    const companionsStr = currentState.companions?.map(c => `- ${c.name} (${c.archetype}): ${c.background}. Abilities: ${c.abilities.join(', ')}. Loyalty: ${c.loyalty}/100 [${c.relationshipStatus}]. Status: ${c.status}`).join('\n') || 'No companions in the party.';
+    promptText = `Current Inventory: ${currentState.inventory.join(', ') || 'Empty'}
+Current Quest: ${currentState.quest}
+Difficulty Level: ${currentState.difficultyLevel}
+Existing Lore:
+${currentState.lore.map(l => `- ${l}`).join('\n') || 'No lore discovered yet.'}
+Key Characters:
+${currentState.characters.map(c => `- ${c.name}: ${c.description} (Relationship: ${c.relationship}, Status: ${c.status})`).join('\n') || 'No key characters encountered yet.'}
+Current Companions:
+${companionsStr}
+User Choice: ${userChoice}`;
   } else {
-    promptText = `Start a new adventure. The user has no items and no quest yet. Introduce the world and give them a starting scenario.`;
+    promptText = `Start a new adventure. The user has no items, no quest and no companions yet. Introduce the world and give them a starting scenario. Make sure to present a chance or hinting at encountering dynamic companions of one of the defined archetypes early on.`;
   }
 
   const newHistory = [...history, { role: 'user', parts: [{ text: promptText }] }];
@@ -166,7 +220,7 @@ export const generateChatResponse = async (
   const ai = getGenAI();
   
   const systemInstruction = `You are a helpful Oracle in a dark fantasy text adventure game.
-You can answer the user's questions about the world, their current quest, characters, or give hints.
+You can answer the user's questions about the world, their current quest, characters, companions, or give hints.
 Current Game State:
 Quest: ${gameState?.quest || 'None'}
 Inventory: ${gameState?.inventory?.join(', ') || 'Empty'}
@@ -174,6 +228,8 @@ World Lore:
 ${gameState?.lore?.map(l => `- ${l}`).join('\n') || 'No lore discovered yet.'}
 Key Characters:
 ${gameState?.characters?.map(c => `- ${c.name}: ${c.description} (Relationship: ${c.relationship}, Status: ${c.status})`).join('\n') || 'None encountered.'}
+Companions:
+${gameState?.companions?.map(c => `- ${c.name} (${c.archetype}): ${c.background} [Loyalty: ${c.loyalty}/100, Relation: ${c.relationshipStatus}, Status: ${c.status}]. Abilities: ${c.abilities?.join(', ')}`).join('\n') || 'None in party.'}
 Recent Story: ${gameState?.storyText || 'Just starting.'}
 Keep responses concise and in character.`;
 
