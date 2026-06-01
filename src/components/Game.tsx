@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateStoryStep, generateImage, generateChatResponse, GameState } from '../services/gemini';
-import { Scroll, Backpack, Image as ImageIcon, MessageSquare, Send, Loader2, Zap, Brain, Save, ToggleLeft, ToggleRight, BookOpen, Search, Users, Swords, Shield, Heart, Sparkles, Info } from 'lucide-react';
+import { Scroll, Backpack, Image as ImageIcon, MessageSquare, Send, Loader2, Zap, Brain, Save, ToggleLeft, ToggleRight, BookOpen, Search, Users, Swords, Shield, Heart, Sparkles, Info, Sword, Download } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 export default function Game() {
@@ -15,12 +15,12 @@ export default function Game() {
   const [chatHistory, setChatHistory] = useState<{ role: string, parts: { text: string }[] }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatting, setIsChatting] = useState(false);
-  const [chatModel, setChatModel] = useState<'gemini-3.1-flash-lite-preview' | 'gemini-3.1-pro-preview'>('gemini-3.1-flash-lite-preview');
+  const [chatModel, setChatModel] = useState<'gemini-2.0-flash' | 'gemini-flash-lite-latest'>('gemini-2.0-flash');
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loreSearchQuery, setLoreSearchQuery] = useState("");
 
-  const [activeTab, setActiveTab] = useState<'quest' | 'companions' | 'lore' | 'settings'>('quest');
+  const [activeTab, setActiveTab] = useState<'quest' | 'companions' | 'lore' | 'combat' | 'settings'>('quest');
   const [companionSubTab, setCompanionSubTab] = useState<'party' | 'npcs' | 'codex'>('party');
 
   const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(() => {
@@ -43,7 +43,8 @@ export default function Game() {
             difficultyLevel: data.gameState.difficultyLevel ?? 0,
             lore: data.gameState.lore ?? [],
             characters: data.gameState.characters ?? [],
-            companions: data.gameState.companions ?? []
+            companions: data.gameState.companions ?? [],
+            combatHistory: data.gameState.combatHistory ?? []
           };
           setGameState(loadedGameState);
           setStoryHistory(data.storyHistory);
@@ -99,7 +100,8 @@ export default function Game() {
         difficultyLevel: state.difficultyLevel ?? 0,
         lore: state.lore ?? [],
         characters: state.characters ?? [],
-        companions: state.companions ?? []
+        companions: state.companions ?? [],
+        combatHistory: state.combatHistory ?? []
       };
       setGameState(stateWithDifficulty);
       setStoryHistory(newHistory);
@@ -123,7 +125,8 @@ export default function Game() {
         difficultyLevel: state.difficultyLevel ?? 0,
         lore: state.lore ?? [],
         characters: state.characters ?? [],
-        companions: state.companions ?? []
+        companions: state.companions ?? [],
+        combatHistory: state.combatHistory ?? []
       };
       setGameState(stateWithDifficulty);
       setStoryHistory(newHistory);
@@ -166,6 +169,22 @@ export default function Game() {
     }
   };
 
+  const downloadCombatLog = () => {
+    if (!gameState?.combatHistory) return;
+    
+    const log = gameState.combatHistory.map(entry => 
+      `Outcome: ${entry.outcome}\nTime: ${entry.timeStamp}\nDamage Dealt: ${entry.damageDealt}\nTactics Used: ${entry.tacticsUsed?.join(', ') || 'None'}`
+    ).join("\n\n---\n\n");
+    
+    const blob = new Blob([log], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `combat-log-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-200 font-sans flex overflow-hidden">
       {/* Left Sidebar - Game State */}
@@ -183,6 +202,7 @@ export default function Game() {
             { id: 'quest', label: 'Quest', icon: Scroll },
             { id: 'companions', label: 'Companions', icon: Users },
             { id: 'lore', label: 'Lore', icon: BookOpen },
+            { id: 'combat', label: 'Combat', icon: Sword },
             { id: 'settings', label: 'Setup', icon: Save }
           ].map((tab) => {
             const Icon = tab.icon;
@@ -260,7 +280,7 @@ export default function Game() {
                 {gameState?.inventory && gameState.inventory.length > 0 ? (
                   <ul className="space-y-1.5">
                     {gameState.inventory.map((item, i) => (
-                      <li key={i} className="bg-zinc-950/50 border border-zinc-805 rounded-lg px-3 py-2 text-xs text-zinc-300 flex items-center gap-2">
+                      <li key={i} title={item} className="bg-zinc-950/50 border border-zinc-805 rounded-lg px-3 py-2 text-xs text-zinc-300 flex items-center gap-2 cursor-help">
                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                         {item}
                       </li>
@@ -533,6 +553,57 @@ export default function Game() {
             </div>
           )}
 
+          {activeTab === 'combat' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+                  <Sword size={13} className="text-zinc-500" /> Combat History
+                </h2>
+                {gameState?.combatHistory && gameState.combatHistory.length > 0 && (
+                  <button 
+                    onClick={downloadCombatLog}
+                    className="flex items-center gap-1 text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded-md transition-colors"
+                  >
+                    <Download size={10} /> Export
+                  </button>
+                )}
+              </div>
+              
+              {gameState?.combatHistory && gameState.combatHistory.length > 0 ? (
+                <ul className="space-y-3 max-h-[500px] overflow-y-auto pr-0.5">
+                  {gameState.combatHistory.map((entry, i) => (
+                    <li key={i} className="bg-zinc-950/50 border border-zinc-800 rounded-xl p-3 shadow-sm space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded font-mono font-bold ${
+                          entry.outcome.toLowerCase() === 'victory' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                          entry.outcome.toLowerCase() === 'defeat' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                          'bg-zinc-800 text-zinc-450'
+                        }`}>
+                          {entry.outcome}
+                        </span>
+                        <span className="text-[9px] text-zinc-500 font-mono">{entry.timeStamp}</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-350 font-bold">{entry.damageDealt}</p>
+                      {entry.tacticsUsed && entry.tacticsUsed.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {entry.tacticsUsed.map((tactic, tIndex) => (
+                            <span key={tIndex} className="bg-zinc-900 border border-zinc-800 text-zinc-450 text-[9px] px-1.5 py-0.5 rounded font-mono">
+                              {tactic}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-xs text-zinc-600 text-center italic py-8 bg-zinc-950/15 border border-dashed border-zinc-800 rounded-xl">
+                  No combat logged yet. Engage your foes to witness your tactical prowess.
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'settings' && (
             <div className="space-y-5">
               {/* Image Quality setting */}
@@ -770,18 +841,18 @@ export default function Game() {
                 </div>
                 <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
                   <button
-                    onClick={() => setChatModel('gemini-3.1-flash-lite-preview')}
+                    onClick={() => setChatModel('gemini-flash-lite-latest')}
                     className={`px-2 py-1 text-xs font-medium rounded-md flex items-center gap-1 transition-colors ${
-                      chatModel === 'gemini-3.1-flash-lite-preview' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                      chatModel === 'gemini-flash-lite-latest' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
                     }`}
                     title="Fast responses"
                   >
                     <Zap size={12} /> Fast
                   </button>
                   <button
-                    onClick={() => setChatModel('gemini-3.1-pro-preview')}
+                    onClick={() => setChatModel('gemini-2.0-flash')}
                     className={`px-2 py-1 text-xs font-medium rounded-md flex items-center gap-1 transition-colors ${
-                      chatModel === 'gemini-3.1-pro-preview' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                      chatModel === 'gemini-2.0-flash' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
                     }`}
                     title="Smart responses"
                   >

@@ -22,6 +22,13 @@ export interface Companion {
   status: string; // e.g. "Active", "Injured", "Fallen", "Deserted"
 }
 
+export interface CombatEntry {
+  outcome: string; // e.g., "Victory", "Defeat", "Narrow Escape"
+  damageDealt: string; // e.g., "Player dealt 20 damage"
+  tacticsUsed: string[]; // e.g., ["Shield Bash", "Healing Potion"]
+  timeStamp: string;
+}
+
 export interface GameState {
   storyText: string;
   choices: string[];
@@ -32,6 +39,7 @@ export interface GameState {
   lore: string[];
   characters: Character[];
   companions: Companion[];
+  combatHistory: CombatEntry[];
 }
 
 const SYSTEM_INSTRUCTION = `You are an expert dungeon master running an infinite choose-your-own-adventure game.
@@ -113,9 +121,23 @@ const responseSchema = {
         required: ["name", "archetype", "background", "abilities", "loyalty", "relationshipStatus", "status"]
       },
       description: "List of recruited companion allies. Actively manage this based on user choices and companion reactions."
+    },
+    combatHistory: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          outcome: { type: Type.STRING },
+          damageDealt: { type: Type.STRING },
+          tacticsUsed: { type: Type.ARRAY, items: { type: Type.STRING } },
+          timeStamp: { type: Type.STRING }
+        },
+        required: ["outcome", "damageDealt", "tacticsUsed", "timeStamp"]
+      },
+      description: "Recent combat history entries."
     }
   },
-  required: ["storyText", "choices", "inventory", "quest", "imagePrompt", "suggestedDifficultyAdjustment", "newLoreEntries", "characters", "companions"]
+  required: ["storyText", "choices", "inventory", "quest", "imagePrompt", "suggestedDifficultyAdjustment", "newLoreEntries", "characters", "companions", "combatHistory"]
 };
 
 export const generateStoryStep = async (
@@ -137,6 +159,8 @@ Key Characters:
 ${currentState.characters.map(c => `- ${c.name}: ${c.description} (Relationship: ${c.relationship}, Status: ${c.status})`).join('\n') || 'No key characters encountered yet.'}
 Current Companions:
 ${companionsStr}
+Combat History:
+${currentState.combatHistory?.map(c => `- ${c.outcome} | Damage: ${c.damageDealt} | Tactics: ${c.tacticsUsed.join(', ')} (${c.timeStamp})`).join('\n') || 'No recent combat.'}
 User Choice: ${userChoice}`;
   } else {
     promptText = `Start a new adventure. The user has no items, no quest and no companions yet. Introduce the world and give them a starting scenario. Make sure to present a chance or hinting at encountering dynamic companions of one of the defined archetypes early on.`;
@@ -145,7 +169,7 @@ User Choice: ${userChoice}`;
   const newHistory = [...history, { role: 'user', parts: [{ text: promptText }] }];
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.1-pro-preview",
+    model: "gemini-2.0-flash",
     contents: newHistory,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -214,7 +238,7 @@ export const generateImage = async (prompt: string, size: "1K" | "2K" | "4K"): P
 export const generateChatResponse = async (
   chatHistory: { role: string, parts: { text: string }[] }[],
   message: string,
-  model: 'gemini-3.1-pro-preview' | 'gemini-3.1-flash-lite-preview',
+  model: 'gemini-2.0-flash' | 'gemini-flash-lite-latest',
   gameState: GameState | null
 ) => {
   const ai = getGenAI();
@@ -230,6 +254,8 @@ Key Characters:
 ${gameState?.characters?.map(c => `- ${c.name}: ${c.description} (Relationship: ${c.relationship}, Status: ${c.status})`).join('\n') || 'None encountered.'}
 Companions:
 ${gameState?.companions?.map(c => `- ${c.name} (${c.archetype}): ${c.background} [Loyalty: ${c.loyalty}/100, Relation: ${c.relationshipStatus}, Status: ${c.status}]. Abilities: ${c.abilities?.join(', ')}`).join('\n') || 'None in party.'}
+Combat History:
+${gameState?.combatHistory?.map(c => `- ${c.outcome} | Damage: ${c.damageDealt} | Tactics: ${c.tacticsUsed.join(', ')} (${c.timeStamp})`).join('\n') || 'No recent combat.'}
 Recent Story: ${gameState?.storyText || 'Just starting.'}
 Keep responses concise and in character.`;
 
